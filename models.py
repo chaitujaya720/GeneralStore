@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy import Column, Integer, String, ForeignKey, create_engine
 from sqlalchemy.ext.declarative import declarative_base
 
 Base = declarative_base()
@@ -33,3 +33,8 @@ class SubCategory(Base):
     name = Column(String)
     description = Column(String)
     category_id = Column(Integer, ForeignKey("category.id"))
+
+
+# # Create the table in the database
+# engine = create_engine(f"sqlite:///database.db")
+# Base.metadata.create_all(engine)

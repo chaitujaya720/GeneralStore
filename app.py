@@ -1,87 +1,32 @@
 import sqlite3
-from flask import Flask
-from flask_restx import Api, Resource, fields
+from flask import request
+from flask_restx import Resource
 from flask_basicauth import BasicAuth
+from api import app, api, location_api_model, department_api_model, category_api_model, sub_category_api_model
 from models import Location, Department, Category, SubCategory
 from models_dao import get_db_session, object_as_dict
 from models_dao import LocationDao, DepartmentDao, CategoryDao, SubCategoryDao
 
-# Initiating Flask Object
-app = Flask(__name__)
 
 # Configuring auth porams, username and password
 app.config['BASIC_AUTH_USERNAME'] = 'chaitujaya720@gmail.com'
 app.config['BASIC_AUTH_PASSWORD'] = 'test@123'
 
-basic_auth = BasicAuth(app) #Initiating Basic Auth
-
-# Creating api object using flask-restx
-api = Api(app, version='1.0', title='GeneralStore API',
-    description='GeneralStore Endpoints',
-)
-
-# Creating api models
-location = api.model('Location', {
-    'name': fields.String(required=True, description='Name of the location'),
-    'description': fields.String(description='Location Description')
-})
-
-department = api.model('Department', {
-    'name': fields.String(required=True, description='Name of the Department'),
-    'location_id': fields.Integer(required=True, description='Location ID of the department'),
-    'description': fields.String(description='Department Description')
-})
-
-category = api.model('Category', {
-    'name': fields.String(required=True, description='Name of the location'),
-    'department_id': fields.Integer(required=True, description='Deparment ID of the category'),
-    'description': fields.String(description='Category Description')
-})
-
-sub_category = api.model('SubCategory', {
-    'name': fields.String(required=True, description='Name of the location'),
-    'category_id': fields.Integer(required=True, description='Category ID'),
-    'description': fields.String(description='Sub Category Description')
-})
+basic_auth = BasicAuth(app)  # Initiating Basic Auth
 
 
 # Initiating DAO Objects
-location = LocationDao()
-department = DepartmentDao()
-category = CategoryDao()
-sub_category = SubCategoryDao()
+location_dao = LocationDao()
+department_dao = DepartmentDao()
+category_dao = CategoryDao()
+sub_category_dao = SubCategoryDao()
 
+
+# Method to establish connection for executing raw sql queries
 def get_db_connection():
     conn = sqlite3.connect('database.db')
     conn.row_factory = sqlite3.Row
     return conn
-
-
-@api.route('/api/v1/summary')
-class StoreSummary(Resource):
-    @basic_auth.required
-    def get(self):
-        objects = []
-        status_code = 200
-        session = get_db_session()
-        try:
-            store_obj = session.query(Location.name.label('Location'),
-                                      Department.name.label('Departmment'),
-                                      Category.name.label('Category'),
-                                      SubCategory.name.label('SubCategory')
-                                     ).join(Category, SubCategory.category_id.__eq__(Category.id)\
-                                           ).join(Department, Category.department_id.__eq__(Department.id)
-                                                  ).join(Location, Department.location_id.__eq__(Location.id))
-
-            objects = [entry._asdict() for entry in store_obj.all()]
-            if not objects:
-                status_code = 204
-        except Exception as e:
-            session.rollback()
-            raise e
-        finally:
-            session.close()
-            return objects, status_code
 
 
 @api.route('/api/v1/location')
@@ -91,7 +36,7 @@ class LocationAPI(Resource):
         locations = []
         status_code = 200
         try:
-            locations = location.get()
+            locations = location_dao.get()
             if not locations:
                 status_code = 204
         except Exception as e:
@@ -100,11 +45,50 @@ class LocationAPI(Resource):
             return locations, status_code
 
     @basic_auth.required
-    @api.expect(location)
+    @api.expect(location_api_model)
     def post(self):
-        test = api.payload
-        import ipdb
-        ipdb.set_trace()
+        try:
+            data = api.payload
+            location_dao.create(data)
+            return "Location Created", 201
+        except Exception as e:
+            raise e
+
+@api.route('/api/v1/location/<int:location_id>')
+class LocationApiById(Resource):
+    @basic_auth.required
+    def get(self, location_id):
+        try:
+            location = location_dao.get(location_id)
+            if location:
+                return location, 200
+            return "Invalid Location ID", 400
+        except Exception as e:
+            raise e
+
+    @basic_auth.required
+    def put(self, location_id):
+        try:
+            data = request.json
+            location = location_dao.get(location_id)
+            if location:
+                location_dao.update(location_id, data)
+                return "Location Updated Successfully", 200
+            return "Invalid Location ID", 400
+        except Exception as e:
+            raise e
+
+    @basic_auth.required
+    def delete(self, location_id):
+        try:
+            location = location_dao.get(location_id)
+            if location:
+                location_dao.delete(location_id)
+                return "Location Deleted Successfully", 200
+            return "Invalid Location ID", 400
+        except Exception as e:
+            raise e
+
 
 @api.route('/api/v1/department')
 class DepartmentAPI(Resource):
@@ -113,13 +97,60 @@ class DepartmentAPI(Resource):
         departments = []
         status_code = 200
         try:
-            departments = department.get()
+            departments = department_dao.get()
             if not departments:
                 status_code = 204
         except Exception as e:
             raise e
         finally:
             return departments, status_code
+
+    @basic_auth.required
+    @api.expect(department_api_model)
+    def post(self):
+        data = api.payload
+        locations = location_dao.get()
+        locations = {location['id'] for location in locations}
+        if data['location_id'] in locations:
+            department_dao.create(data)
+            return "Department Created", 201
+        return "Invalid Location", 400
+
+
+@api.route('/api/v1/location/<int:department_id>')
+class DepartmentApiById(Resource):
+    @basic_auth.required
+    def get(self, department_id):
+        try:
+            department = department_dao.get(department_id)
+            if department:
+                return department, 200
+            return "Invalid Department ID", 400
+        except Exception as e:
+            raise e
+
+    @basic_auth.required
+    def put(self, department_id):
+        try:
+            data = request.json
+            department = department_dao.get(department_id)
+            if department:
+                department_dao.update(department_id, data)
+                return "Department Updated Successfully", 200
+            return "Invalid Department ID", 400
+        except Exception as e:
+            raise e
+
+    @basic_auth.required
+    def delete(self, department_id):
+        try:
+            department = department_dao.get(department_id)
+            if department:
+                department_dao.delete(department_id)
+                return "Department Deleted Successfully", 200
+            return "Invalid Department ID", 400
+        except Exception as e:
+            raise e
 
 
 @api.route('/api/v1/category')
@@ -129,13 +160,60 @@ class CategoryAPI(Resource):
         categories = []
         status_code = 200
         try:
-            categories = category.get()
+            categories = category_dao.get()
             if not categories:
                 status_code = 204
         except Exception as e:
             raise e
         finally:
             return categories, status_code
+
+    @basic_auth.required
+    @api.expect(category_api_model)
+    def post(self):
+        data = api.payload
+        departments = department_dao.get()
+        departments = {department['id'] for department in departments}
+        if data['department_id'] in departments:
+            category_dao.create(data)
+            return "Category Created", 201
+        return "Invalid Department", 400
+
+
+@api.route('/api/v1/location/<int:category_id>')
+class CategoryApiById(Resource):
+    @basic_auth.required
+    def get(self, category_id):
+        try:
+            category = category_dao.get(category_id)
+            if category:
+                return category, 200
+            return "Invalid Category ID", 400
+        except Exception as e:
+            raise e
+
+    @basic_auth.required
+    def put(self, category_id):
+        try:
+            data = request.json
+            category = category_dao.get(category_id)
+            if category:
+                category_dao.update(category_id, data)
+                return "Category Updated Successfully", 200
+            return "Invalid Category ID", 400
+        except Exception as e:
+            raise e
+
+    @basic_auth.required
+    def delete(self, category_id):
+        try:
+            category = category_dao.get(category_id)
+            if category:
+                category_dao.delete(category_id)
+                return "Category Deleted Successfully", 200
+            return "Invalid Category ID", 400
+        except Exception as e:
+            raise e
 
 
 @api.route('/api/v1/sub_category')
@@ -145,7 +223,7 @@ class SubCategoryAPI(Resource):
         sub_categories = []
         status_code = 200
         try:
-            sub_categories = sub_category.get()
+            sub_categories = sub_category_dao.get()
             if not sub_categories:
                 status_code = 204
         except Exception as e:
@@ -153,7 +231,51 @@ class SubCategoryAPI(Resource):
         finally:
             return sub_categories, status_code
 
+    @basic_auth.required
+    @api.expect(sub_category_api_model)
+    def post(self):
+        data = api.payload
+        categories = category_dao.get()
+        categories = {category['id'] for category in categories}
+        if data['category_id'] in categories:
+            category_dao.create(data)
+            return "Sub Category Created", 201
+        return "Invalid Category", 400
 
+@api.route('/api/v1/location/<int:sub_category_id>')
+class SubCategoryApiById(Resource):
+    @basic_auth.required
+    def get(self, sub_category_id):
+        try:
+            sub_category = sub_category_dao.get(sub_category_id)
+            if sub_category:
+                return sub_category, 200
+            return "Invalid Sub Category ID", 400
+        except Exception as e:
+            raise e
+
+    @basic_auth.required
+    def put(self, sub_category_id):
+        try:
+            data = request.json
+            sub_category = sub_category_dao.get(sub_category_id)
+            if sub_category:
+                sub_category_dao.update(sub_category_id, data)
+                return "Sub Category Updated Successfully", 200
+            return "Invalid Sub Category ID", 400
+        except Exception as e:
+            raise e
+
+    @basic_auth.required
+    def delete(self, sub_category_id):
+        try:
+            sub_category = sub_category_dao.get(sub_category_id)
+            if sub_category:
+                sub_category_dao.delete(sub_category_id)
+                return "Sub Category Deleted Successfully", 200
+            return "Invalid Sub Category ID", 400
+        except Exception as e:
+            raise e
 @api.route('/api/v1/location/<int:location_id>/department')
 class DeparmentsByLocation(Resource):
     @basic_auth.required
@@ -195,6 +317,33 @@ class CategoriesByDepartmentPerLocation(Resource):
         finally:
             session.close()
             return categories, status_code
+
+
+@api.route('/api/v1/summary')
+class StoreSummary(Resource):
+    @basic_auth.required
+    def get(self):
+        objects = []
+        status_code = 200
+        session = get_db_session()
+        try:
+            store_obj = session.query(Location.name.label('Location'),
+                                      Department.name.label('Departmment'),
+                                      Category.name.label('Category'),
+                                      SubCategory.name.label('SubCategory')
+                                     ).join(Category, SubCategory.category_id.__eq__(Category.id)\
+                                           ).join(Department, Category.department_id.__eq__(Department.id)
+                                                  ).join(Location, Department.location_id.__eq__(Location.id))
+
+            objects = [entry._asdict() for entry in store_obj.all()]
+            if not objects:
+                status_code = 204
+        except Exception as e:
+            session.rollback()
+            raise e
+        finally:
+            session.close()
+            return objects, status_code
 
 
 if __name__ == '__main__':
