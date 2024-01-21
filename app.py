@@ -117,7 +117,7 @@ class DepartmentAPI(Resource):
         return "Invalid Location", 400
 
 
-@api.route('/api/v1/location/<int:department_id>')
+@api.route('/api/v1/department/<int:department_id>')
 class DepartmentApiById(Resource):
     @basic_auth.required
     def get(self, department_id):
@@ -180,7 +180,7 @@ class CategoryAPI(Resource):
         return "Invalid Department", 400
 
 
-@api.route('/api/v1/location/<int:category_id>')
+@api.route('/api/v1/category/<int:category_id>')
 class CategoryApiById(Resource):
     @basic_auth.required
     def get(self, category_id):
@@ -242,7 +242,7 @@ class SubCategoryAPI(Resource):
             return "Sub Category Created", 201
         return "Invalid Category", 400
 
-@api.route('/api/v1/location/<int:sub_category_id>')
+@api.route('/api/v1/sub_category/<int:sub_category_id>')
 class SubCategoryApiById(Resource):
     @basic_auth.required
     def get(self, sub_category_id):
